@@ -1,2 +1,5 @@
 # 🚩 IntraPSIC: synthetic suicidality disclosures for AI safety evaluation, labeled for real-world intersectional political and economic stressors
-tk
+
+> _The risk factors for suicide do not simply refer to individuals in cognitive, emotional, and behavioral distress; the risk factors for suicide also refer to the structural conditions in which people live, especially conditions that are marked by the intersections of poverty and various forms of social and political marginalization: by race, class, age, sexuality, rurality, and veteran status.[^1]_
+
+[^1]: Button ME. Suicidal regimes: public policy and the formation of vulnerability to suicide. In: Stanley J, Strole S, eds. _Suicide and Public Policy_. NASW Press and Oxford University Press; 2021:87-101. [doi: 10.1093/acrefore/9780199975839.013.1500](https://doi.org/10.1093/acrefore/9780199975839.013.1500)
