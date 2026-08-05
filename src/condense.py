@@ -1,6 +1,9 @@
 """Condense labeled data by excising metadata and artifacts."""
 
+import ast
+
 import pandas as pd
+
 
 def condense(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -41,8 +44,8 @@ def condense(df: pd.DataFrame) -> pd.DataFrame:
     ])
 
     # Unnest normalized `pos(1)` probabilities
-    prob_cols = [col for col in d.columns if col.endswith('_prob')]
+    prob_cols = [col for col in df.columns if col.endswith('_prob')]
     for col in prob_cols:
-        df[col] = df[col].apply(lambda i: round(ast.literal_eval(i)[1], 2))
+        df[col] = df[col].apply(lambda x: round(ast.literal_eval(x)[1], 2))
 
     return df
