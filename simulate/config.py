@@ -67,6 +67,7 @@ INPUT_FILES = {
     'personas': DATA_DIR / 'personas.tsv',
     'seed_phrases': DATA_DIR / 'seed_phrases.tsv',
     'persona_context': DATA_DIR / 'persona_context.txt',
+    'suicide_risk_levels': DATA_DIR / 'suicide_risk_level.tsv',
 }
 
 OUTPUT_FILES = {

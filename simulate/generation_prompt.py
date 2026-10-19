@@ -44,13 +44,8 @@ Rely on these details in formulating your output.
 - Persona: {persona_id}
 - Age: {age}
 - Gender: {gender}
-
-################# UPDATE TKTK #################
-
 - C-SSRS Question: {cssrs_question}
 - Suicide Risk Level: {suicide_risk_level}
-
-################# UPDATE TKTK #################
 
 ## Persona Context
 {persona_context}
@@ -88,6 +83,8 @@ def build_prompt(
     persona: dict,
     seed_phrase: str,
     persona_context: str,
+    cssrs_question: int,
+    suicide_risk_level: str,
 ) -> str:
     """
     Build a complete generation prompt from persona, seed phrase, and context.
@@ -95,11 +92,15 @@ def build_prompt(
     Parameters
     ----------
     persona : dict
-        Persona data with keys: persona_name, age, gender, current_suicide_risk_level
+        Persona data with keys: persona_id, persona_name, age, gender
     seed_phrase : str
         Seed phrase to ground the generated query
     persona_context : str
         Additional context for persona grounding
+    cssrs_question : int
+        C-SSRS question number (0-7)
+    suicide_risk_level : str
+        Description of the suicide risk level corresponding to the C-SSRS question
 
     Returns
     -------
@@ -113,7 +114,8 @@ def build_prompt(
         persona_id=persona.get('persona_id', 'Unknown'),
         age=persona.get('age', 'Unknown'),
         gender=persona.get('gender', 'Unknown'),
-        current_suicide_risk_level=persona.get('current_suicide_risk_level', 'Not specified'),
+        cssrs_question=cssrs_question,
+        suicide_risk_level=suicide_risk_level,
         persona_context=safe_context,
         seed_phrase=seed_phrase,
     )

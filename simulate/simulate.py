@@ -64,6 +64,26 @@ def load_seed_phrases(filepath: Path) -> list[dict]:
     return seeds
 
 
+def load_suicide_risk_levels(filepath: Path) -> list[dict]:
+    """
+    Load suicide risk levels from TSV file.
+
+    Returns
+    -------
+    list[dict]
+        List of dicts with 'cssrs_question' (int) and 'suicide_risk_level' (str)
+    """
+    levels = []
+    with open(filepath, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            levels.append({
+                'cssrs_question': int(row['cssrs_question']),
+                'suicide_risk_level': row['suicide_risk_level'],
+            })
+    return levels
+
+
 def load_persona_contexts(filepath: Path) -> dict[str, str]:
     """
     Load persona-specific contexts from a single text file.
@@ -170,9 +190,9 @@ def save_checkpoint(filepath: Path, completed: set):
         json.dump({'completed': list(completed)}, f)
 
 
-def make_generation_key(persona_id: str, seed_id: str, model: str, temperature: float) -> str:
+def make_generation_key(persona_id: str, seed_id: str, model: str, temperature: float, cssrs_question: int) -> str:
     """Create a unique key for a generation task."""
-    return f"{persona_id}|{seed_id}|{model}|{temperature}"
+    return f"{persona_id}|{seed_id}|{model}|{temperature}|{cssrs_question}"
 
 
 # ------------------------------------------------------ #
@@ -193,7 +213,8 @@ def init_output_file(filepath: Path):
                 'seed_id',
                 'generated_query',
                 'token_count',
-                'current_suicide_risk_level',
+                'cssrs_question',
+                'suicide_risk_level',
                 'suicidal',
             ])
 
@@ -210,14 +231,15 @@ def append_result(filepath: Path, result: dict):
             result['seed_id'],
             result['generated_query'],
             result['token_count'],
-            result['current_suicide_risk_level'],
+            result['cssrs_question'],
+            result['suicide_risk_level'],
             result['suicidal'],
         ])
 
 
 def sort_output_file(filepath: Path):
     """
-    Sort output TSV by persona_id, seed_id, model_sim, temperature.
+    Sort output TSV by persona_id, seed_id, model_sim, temperature, cssrs_question.
     Reads the file, sorts rows, and rewrites in place.
     """
     with open(filepath, 'r', newline='', encoding='utf-8') as f:
@@ -228,12 +250,13 @@ def sort_output_file(filepath: Path):
     if not rows:
         return
 
-    # Sort: persona_id -> seed_id -> model_sim -> temperature
+    # Sort: persona_id -> seed_id -> model_sim -> temperature -> cssrs_question
     rows.sort(key=lambda r: (
         r['persona_id'],
         r['seed_id'],
         r['model_sim'],
         float(r['temperature']),
+        int(r['cssrs_question']),
     ))
 
     with open(filepath, 'w', newline='', encoding='utf-8') as f:
@@ -261,15 +284,17 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
     personas = load_personas(INPUT_FILES['personas'])
     seeds = load_seed_phrases(INPUT_FILES['seed_phrases'])
     contexts = load_persona_contexts(INPUT_FILES['persona_context'])
+    risk_levels = load_suicide_risk_levels(INPUT_FILES['suicide_risk_levels'])
 
     print("Validating inputs...")
     validate_inputs(personas, seeds, contexts)
     print(f"  Loaded {len(personas)} personas")
     print(f"  Loaded {len(seeds)} seed phrases")
     print(f"  Loaded {len(contexts)} persona contexts")
+    print(f"  Loaded {len(risk_levels)} suicide risk levels")
 
-    # Build generation tasks with temperature variation
-    # Each persona/seed/model combo is generated at multiple temperatures
+    # Build generation tasks with temperature and risk level variation
+    # Each persona/seed/model/risk_level combo is generated at multiple temperatures
     tasks = []
 
     persona_map = {p['persona_id']: p for p in personas}
@@ -278,17 +303,20 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
         persona = persona_map[seed['persona_id']]
         for model_config in OLLAMA_MODELS:
             for temp in TEMPERATURES:
-                tasks.append({
-                    'persona': persona,
-                    'seed': seed,
-                    'model_config': model_config,
-                    'temperature': temp,
-                })
+                for risk_level in risk_levels:
+                    tasks.append({
+                        'persona': persona,
+                        'seed': seed,
+                        'model_config': model_config,
+                        'temperature': temp,
+                        'risk_level': risk_level,
+                    })
 
     random.shuffle(tasks)
     print(f"  Total generation tasks: {len(tasks)}")
     print(f"  Models: {[m['name'] for m in OLLAMA_MODELS]}")
     print(f"  Temperatures: {TEMPERATURES}")
+    print(f"  C-SSRS levels: {[r['cssrs_question'] for r in risk_levels]}")
 
     # # Cost estimation for OpenAI calls (commented out - using Ollama models only)
     # openai_tasks = len([t for t in tasks if t['model'] == 'openai'])
@@ -327,24 +355,31 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
         seed = task['seed']
         model_config = task['model_config']
         temperature = task['temperature']
+        risk_level = task['risk_level']
+
+        cssrs_question = risk_level['cssrs_question']
+        suicide_risk_level = risk_level['suicide_risk_level']
 
         key = make_generation_key(
             persona['persona_id'],
             seed['seed_id'],
             model_config['name'],
             temperature,
+            cssrs_question,
         )
 
         if key in completed:
             skipped += 1
             continue
 
-        # Build prompt with persona-specific context
+        # Build prompt with persona-specific context and risk level
         persona_context = contexts[persona['persona_id']]
         prompt = build_prompt(
             persona=persona,
             seed_phrase=seed['seed_phrase'],
             persona_context=persona_context,
+            cssrs_question=cssrs_question,
+            suicide_risk_level=suicide_risk_level,
         )
 
         # Generate with temperature override
@@ -357,8 +392,8 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
             }
             response = get_ollama_response(prompt, config_override)
 
-            risk_level = persona.get('current_suicide_risk_level', '')
-            suicidal = 0 if risk_level.lower().startswith('no or low risk') else 1
+            # cssrs_question 0 = no suicidal ideation
+            suicidal = 0 if cssrs_question == 0 else 1
 
             result = {
                 'timestamp': datetime.now().isoformat(),
@@ -368,7 +403,8 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
                 'seed_id': seed['seed_id'],
                 'generated_query': response['text'],
                 'token_count': response['token_count'],
-                'current_suicide_risk_level': risk_level,
+                'cssrs_question': cssrs_question,
+                'suicide_risk_level': suicide_risk_level,
                 'suicidal': suicidal,
             }
 
@@ -381,7 +417,7 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
             continue
 
     # Sort output for intuitive inspection
-    print("\nSorting output by persona_id -> seed_id -> model_sim -> temperature...")
+    print("\nSorting output by persona_id -> seed_id -> model_sim -> temperature -> cssrs_question...")
     sort_output_file(output_path)
 
     # Summary
