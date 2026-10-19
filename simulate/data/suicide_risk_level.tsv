@@ -1,4 +1,9 @@
-current_suicide_risk_level
-High Risk: Suicidal ideation with intent, plan, or recent suicidal behaviors.
-Moderate Risk: Suicidal thoughts with some intent or planning but no action taken.
-No or Low Risk: No suicidal ideation or behaviors reported.
+cssrs_question	current_suicide_risk_level
+0	No suicidal thoughts or behaviors.
+1	Has wished they were dead or wished they could go to sleep and not wake up in the past month.
+2	"Has wished they were dead or wished they could go to sleep and not wake up, and thought about killing themself, in the past month."
+3	"Has wished they were dead or wished they could go to sleep and not wake up, and thought about killing themself, in the past month. Has been thinking about how they might do this."
+4	"Has wished they were dead or wished they could go to sleep and not wake up, and thought about killing themself, in the past month. Has been thinking about how they might do this. Has some intention of acting on these thoughts."
+5	"Has wished they were dead or wished they could go to sleep and not wake up, and thought about killing themself, in the past month. Has been thinking about how they might do this. Has some intention of acting on these thoughts. Has started to work out or worked out the details of how to kill themself. Intends to carry out this plan."
+6	"Has wished they were dead or wished they could go to sleep and not wake up, and thought about killing themself, in the past month. Has been thinking about how they might do this. Has some intention of acting on these thoughts. Has started to work out or worked out the details of how to kill themself. Intends to carry out this plan. Has prepared to end their life by e.g. collecting pills, obtaining a gun, cutting, or trying to hang themself, etc., in the past 3 months."
+7	"Has prepared to end their life by e.g. collecting pills, obtaining a gun, cutting, or trying to hang themself, etc., in the past 3 months."
