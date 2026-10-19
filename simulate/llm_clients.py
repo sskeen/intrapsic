@@ -6,7 +6,7 @@
 #   Creates fresh client instances per generation call.
 #   Includes rate limiting and random seed support.
 #
-#   Simone J. Skeen x Claude Code (06-23-2026)
+#   Simone J. Skeen x Claude Code (09-30-2026)
 #
 # ------------------------------------------------------ #
 
@@ -64,10 +64,11 @@ def normalize_text(text: str) -> str:
 
     return text
 
-from openai import OpenAI
+# from openai import OpenAI  # Commented out - using Ollama models only
 from ollama import Client as OllamaClient
 
-from config import OPENAI_CONFIG, OLLAMA_CONFIG, RATE_LIMIT_CONFIG
+from config import OLLAMA_BASE_CONFIG, RATE_LIMIT_CONFIG
+# from config import OPENAI_CONFIG  # Commented out - using Ollama models only
 
 
 def get_openai_response(prompt: str, config: dict = None) -> dict:
@@ -79,23 +80,27 @@ def get_openai_response(prompt: str, config: dict = None) -> dict:
     prompt : str
         The prompt to send to the model
     config : dict, optional
-        Override default OPENAI_CONFIG settings
+        Override default OPENAI_CONFIG settings. Use 'temperature' key
+        to specify temperature for this call.
 
     Returns
     -------
     dict
-        Response containing 'text' and 'token_count' keys
+        Response containing 'text', 'token_count', 'model', and 'temperature' keys
     """
     cfg = {**OPENAI_CONFIG, **(config or {})}
 
     # Fresh client instance per call
     client = OpenAI()
 
+    # Use temperature from config override, or default to first in list
+    temperature = cfg.get('temperature', cfg.get('temperatures', [0.7])[0])
+
     response = client.chat.completions.create(
         model=cfg['model'],
         messages=[{'role': 'user', 'content': prompt}],
-        max_completion_tokens=cfg['max_tokens'],
-        reasoning_effort=cfg['reasoning_effort'],
+        max_tokens=cfg['max_tokens'],
+        temperature=temperature,
         seed=cfg.get('seed'),
     )
 
@@ -103,7 +108,6 @@ def get_openai_response(prompt: str, config: dict = None) -> dict:
     delay = RATE_LIMIT_CONFIG.get('delay_seconds', 1.0)
     time.sleep(delay)
 
-    # Extract text - handle None for reasoning models
     message = response.choices[0].message
     text = message.content or ''
 
@@ -111,6 +115,7 @@ def get_openai_response(prompt: str, config: dict = None) -> dict:
         'text': normalize_text(text),
         'token_count': response.usage.completion_tokens,
         'model': cfg['model'],
+        'temperature': temperature,
     }
 
 
@@ -123,14 +128,16 @@ def get_ollama_response(prompt: str, config: dict = None) -> dict:
     prompt : str
         The prompt to send to the model
     config : dict, optional
-        Override default OLLAMA_CONFIG settings
+        Override default OLLAMA_BASE_CONFIG settings. Must include 'model'
+        and 'temperature' keys for the specific model to use.
 
     Returns
     -------
     dict
-        Response containing 'text' and 'token_count' keys
+        Response containing 'text', 'token_count', 'model', and 'temperature' keys
     """
-    cfg = {**OLLAMA_CONFIG, **(config or {})}
+    cfg = {**OLLAMA_BASE_CONFIG, **(config or {})}
+    temperature = cfg['temperature']
 
     # Fresh client instance per call
     client = OllamaClient(host=cfg['base_url'])
@@ -139,7 +146,7 @@ def get_ollama_response(prompt: str, config: dict = None) -> dict:
         model=cfg['model'],
         prompt=prompt,
         options={
-            'temperature': cfg['temperature'],
+            'temperature': temperature,
             'num_predict': cfg['num_predict'],
             'seed': cfg.get('seed', 56),
         },
@@ -162,6 +169,7 @@ def get_ollama_response(prompt: str, config: dict = None) -> dict:
         'text': normalize_text(text),
         'token_count': response.get('eval_count', 0),
         'model': cfg['model'],
+        'temperature': temperature,
     }
 
 

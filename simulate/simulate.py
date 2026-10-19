@@ -6,7 +6,7 @@
 #   Generates queries using dual LLM backends with
 #   checkpointing, cost estimation, and progress tracking.
 #
-#   Simone J. Skeen x Claude Code (06-23-2026)
+#   Simone J. Skeen x Claude Code (09-30-2026)
 #
 # ------------------------------------------------------ #
 
@@ -15,6 +15,7 @@ load_dotenv()
 
 import csv
 import json
+import random
 import re
 import argparse
 from datetime import datetime
@@ -27,12 +28,15 @@ from config import (
     INPUT_FILES,
     OUTPUT_FILES,
     OUTPUT_DIR,
+    TEMPERATURES,
+    OLLAMA_MODELS,
+    OLLAMA_BASE_CONFIG,
 )
 from generation_prompt import build_prompt
 from llm_clients import (
-    get_openai_response,
+    # get_openai_response,  # Commented out - using Ollama models only
     get_ollama_response,
-    estimate_openai_cost,
+    # estimate_openai_cost,  # Commented out - using Ollama models only
 )
 
 
@@ -166,9 +170,9 @@ def save_checkpoint(filepath: Path, completed: set):
         json.dump({'completed': list(completed)}, f)
 
 
-def make_generation_key(persona_id: str, seed_id: str, model: str) -> str:
+def make_generation_key(persona_id: str, seed_id: str, model: str, temperature: float) -> str:
     """Create a unique key for a generation task."""
-    return f"{persona_id}|{seed_id}|{model}"
+    return f"{persona_id}|{seed_id}|{model}|{temperature}"
 
 
 # ------------------------------------------------------ #
@@ -184,10 +188,13 @@ def init_output_file(filepath: Path):
             writer.writerow([
                 'timestamp',
                 'persona_id',
-                'model',
+                'model_sim',
+                'temperature',
                 'seed_id',
                 'generated_query',
                 'token_count',
+                'current_suicide_risk_level',
+                'suicidal',
             ])
 
 
@@ -198,11 +205,41 @@ def append_result(filepath: Path, result: dict):
         writer.writerow([
             result['timestamp'],
             result['persona_id'],
-            result['model'],
+            result['model_sim'],
+            result['temperature'],
             result['seed_id'],
             result['generated_query'],
             result['token_count'],
+            result['current_suicide_risk_level'],
+            result['suicidal'],
         ])
+
+
+def sort_output_file(filepath: Path):
+    """
+    Sort output TSV by persona_id, seed_id, model_sim, temperature.
+    Reads the file, sorts rows, and rewrites in place.
+    """
+    with open(filepath, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        rows = list(reader)
+        fieldnames = reader.fieldnames
+
+    if not rows:
+        return
+
+    # Sort: persona_id -> seed_id -> model_sim -> temperature
+    rows.sort(key=lambda r: (
+        r['persona_id'],
+        r['seed_id'],
+        r['model_sim'],
+        float(r['temperature']),
+    ))
+
+    with open(filepath, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t', extrasaction='ignore')
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 # ------------------------------------------------------ #
@@ -231,38 +268,43 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
     print(f"  Loaded {len(seeds)} seed phrases")
     print(f"  Loaded {len(contexts)} persona contexts")
 
-    # Build generation tasks
-    models = ['openai', 'ollama']
+    # Build generation tasks with temperature variation
+    # Each persona/seed/model combo is generated at multiple temperatures
     tasks = []
 
     persona_map = {p['persona_id']: p for p in personas}
 
     for seed in seeds:
         persona = persona_map[seed['persona_id']]
-        for model in models:
-            tasks.append({
-                'persona': persona,
-                'seed': seed,
-                'model': model,
-            })
+        for model_config in OLLAMA_MODELS:
+            for temp in TEMPERATURES:
+                tasks.append({
+                    'persona': persona,
+                    'seed': seed,
+                    'model_config': model_config,
+                    'temperature': temp,
+                })
 
+    random.shuffle(tasks)
     print(f"  Total generation tasks: {len(tasks)}")
+    print(f"  Models: {[m['name'] for m in OLLAMA_MODELS]}")
+    print(f"  Temperatures: {TEMPERATURES}")
 
-    # Cost estimation for OpenAI calls
-    openai_tasks = len([t for t in tasks if t['model'] == 'openai'])
-    if openai_tasks > 0:
-        cost_estimate = estimate_openai_cost(openai_tasks)
-        print("\nOpenAI Cost Estimate:")
-        print(f"  Generations: {cost_estimate['num_generations']}")
-        print(f"  Est. input tokens: {cost_estimate['total_input_tokens']:,}")
-        print(f"  Est. output tokens: {cost_estimate['total_output_tokens']:,}")
-        print(f"  Est. total cost: ${cost_estimate['total_cost']:.4f}")
-
-        if not skip_cost_confirm and not dry_run:
-            confirm = input("\nProceed with generation? [y/N]: ")
-            if confirm.lower() != 'y':
-                print("Aborted by user.")
-                return
+    # # Cost estimation for OpenAI calls (commented out - using Ollama models only)
+    # openai_tasks = len([t for t in tasks if t['model'] == 'openai'])
+    # if openai_tasks > 0:
+    #     cost_estimate = estimate_openai_cost(openai_tasks)
+    #     print("\nOpenAI Cost Estimate:")
+    #     print(f"  Generations: {cost_estimate['num_generations']}")
+    #     print(f"  Est. input tokens: {cost_estimate['total_input_tokens']:,}")
+    #     print(f"  Est. output tokens: {cost_estimate['total_output_tokens']:,}")
+    #     print(f"  Est. total cost: ${cost_estimate['total_cost']:.4f}")
+    #
+    #     if not skip_cost_confirm and not dry_run:
+    #         confirm = input("\nProceed with generation? [y/N]: ")
+    #         if confirm.lower() != 'y':
+    #             print("Aborted by user.")
+    #             return
 
     if dry_run:
         print("\n[DRY RUN] Validation complete. No LLM calls made.")
@@ -283,12 +325,14 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
     for task in tqdm(tasks, desc="Generating queries"):
         persona = task['persona']
         seed = task['seed']
-        model = task['model']
+        model_config = task['model_config']
+        temperature = task['temperature']
 
         key = make_generation_key(
             persona['persona_id'],
             seed['seed_id'],
-            model,
+            model_config['name'],
+            temperature,
         )
 
         if key in completed:
@@ -303,20 +347,29 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
             persona_context=persona_context,
         )
 
-        # Generate
+        # Generate with temperature override
         try:
-            if model == 'openai':
-                response = get_openai_response(prompt)
-            else:
-                response = get_ollama_response(prompt)
+            # Merge model-specific config with base config and temperature
+            config_override = {
+                **OLLAMA_BASE_CONFIG,
+                **model_config,
+                'temperature': temperature,
+            }
+            response = get_ollama_response(prompt, config_override)
+
+            risk_level = persona.get('current_suicide_risk_level', '')
+            suicidal = 0 if risk_level.lower().startswith('no or low risk') else 1
 
             result = {
                 'timestamp': datetime.now().isoformat(),
                 'persona_id': persona['persona_id'],
-                'model': response['model'],
+                'model_sim': response['model'],
+                'temperature': temperature,
                 'seed_id': seed['seed_id'],
                 'generated_query': response['text'],
                 'token_count': response['token_count'],
+                'current_suicide_risk_level': risk_level,
+                'suicidal': suicidal,
             }
 
             append_result(output_path, result)
@@ -326,6 +379,10 @@ def run_pipeline(dry_run: bool = False, skip_cost_confirm: bool = False):
         except Exception as e:
             print(f"\nError generating {key}: {e}")
             continue
+
+    # Sort output for intuitive inspection
+    print("\nSorting output by persona_id -> seed_id -> model_sim -> temperature...")
+    sort_output_file(output_path)
 
     # Summary
     print(f"\nGeneration complete!")
