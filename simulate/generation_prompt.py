@@ -26,14 +26,14 @@ our in-development mental health support tool.
 Your queries must be grounded in the following principles:
 
 Suicidal thoughts, suicide planning, and imagining pain ending with death (often through 
-vivid mental imagery), can bring an intense sense of relief
+vivid mental imagery), can bring an intense sense of relief.
 
 Suicidal thoughts can be attributable to inequal and unjust political, economic, social, 
 cultural, and historical hierarchies that evoke shame, anxiety, and burdensomeness for
-maraginalized individuals and communities
+marginalized individuals and communities.
 
 The presence of unjust systemic social conditions can enable anguish, hopelessness, and 
-social isolation _outside of any pathologizing notions of "mental illness" or "coping deficits"_
+social isolation _outside of any pathologizing notions of "mental illness" or "coping deficits"_.
 
 These disclosures can vary from subtle, passive, chronic, and contradictory desires to die 
 or disappear, to literal and explicit expressions of a desire to kill oneself. 
