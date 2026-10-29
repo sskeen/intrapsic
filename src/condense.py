@@ -27,6 +27,7 @@ def condense(df: pd.DataFrame) -> pd.DataFrame:
         'p_date',    ### datetime (dupe)
         'id',        ### Reddit post id
         'n_cmnt',    ### number of top-level comments
+        'gpe',       ### flagged geopolitical entity, spaCy
         'not_us',    ### 0/1 for mentions of non-U.S. geographies
         'sui_re',    ### explicit suicidality regex max: pre-disambiguation
         'cpnd_pred', ### computed indicator for comorbid asp + dep + val
