@@ -1,6 +1,9 @@
 # Raw data
 data/raw
 
+# Resampled gold label data
+data/processed
+
 # Environmental vars
 .env
 
